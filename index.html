@@ -10,6 +10,13 @@
   <?!= include('style'); ?>
 </head>
 <body>
+<body>
+  <div id="loading-overlay" class="d-none">
+    <div class="text-center">
+      <div class="spinner-custom mb-2 mx-auto"></div>
+      <h5 class="fw-bold text-danger">Memproses...</h5>
+    </div>
+  </div>
 
   <div id="login-section" class="d-flex align-items-center justify-content-center vh-100 bg-gradient-primary">
     <div class="card shadow-lg p-4" style="width: 350px; border-radius: 15px;">
@@ -31,13 +38,13 @@
       <div class="small text-white-50 mb-3">User: <strong id="display-user">Admin</strong></div>
       <hr>
       <ul class="nav nav-pills flex-column mb-auto gap-2">
-        <li><a href="javascript:void(0)" onclick="showPage('dashboard')" class="nav-link text-white active" id="nav-dashboard"><i class="material-icons me-2 align-middle">dashboard</i> Dashboard</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('kasir')" class="nav-link text-white" id="nav-kasir"><i class="material-icons me-2 align-middle">point_of_sale</i> Kasir Jual</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('pembelian')" class="nav-link text-white" id="nav-pembelian"><i class="material-icons me-2 align-middle">shopping_cart</i> Stok Masuk</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('produk')" class="nav-link text-white" id="nav-produk"><i class="material-icons me-2 align-middle">inventory_2</i> Produk</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('keuangan')" class="nav-link text-white" id="nav-keuangan"><i class="material-icons me-2 align-middle">account_balance_wallet</i> Arus Kas</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('payroll')" class="nav-link text-white" id="nav-payroll"><i class="material-icons me-2 align-middle">badge</i> Payroll</a></li>
-        <li><a href="javascript:void(0)" onclick="showPage('laporan')" class="nav-link text-white" id="nav-laporan"><i class="material-icons me-2 align-middle">assessment</i> Laporan</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('dashboard')" class="nav-link text-white active" id="nav-dashboard"><i class="material-icons me-2 align-middle">dashboard</i> Dashboard</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('kasir')" class="nav-link text-white" id="nav-kasir"><i class="material-icons me-2 align-middle">point_of_sale</i> Kasir Jual</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('pembelian')" class="nav-link text-white" id="nav-pembelian"><i class="material-icons me-2 align-middle">shopping_cart</i> Stok Masuk</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('produk')" class="nav-link text-white" id="nav-produk"><i class="material-icons me-2 align-middle">inventory_2</i> Produk</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('keuangan')" class="nav-link text-white" id="nav-keuangan"><i class="material-icons me-2 align-middle">account_balance_wallet</i> Arus Kas</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('payroll')" class="nav-link text-white" id="nav-payroll"><i class="material-icons me-2 align-middle">badge</i> Payroll</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('laporan')" class="nav-link text-white" id="nav-laporan"><i class="material-icons me-2 align-middle">assessment</i> Laporan</a></li>
       </ul>
       <button onclick="logout()" class="btn btn-outline-light w-100 mt-4"><i class="material-icons align-middle">logout</i> Keluar</button>
     </div>
