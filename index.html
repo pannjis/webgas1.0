@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+  <?!= include('style'); ?>
+</head>
+<body>
+
+  <div id="login-section" class="d-flex align-items-center justify-content-center vh-100 bg-gradient-primary">
+    <div class="card shadow-lg p-4" style="width: 350px; border-radius: 15px;">
+      <div class="text-center mb-4">
+        <h3 class="fw-bold text-danger">🔥 SiGAS PRO</h3>
+        <small class="text-muted">Aplikasi Agen Gas</small>
+      </div>
+      <input type="text" id="username" class="form-control mb-3" placeholder="Username (admin)">
+      <input type="password" id="password" class="form-control mb-3" placeholder="Password (admin123)">
+      <button onclick="handleLogin()" class="btn btn-danger w-100 fw-bold">MASUK</button>
+      <div id="login-msg" class="text-center mt-3 text-danger small"></div>
+    </div>
+  </div>
+
+  <div id="main-app" class="d-flex d-none" style="height: 100vh;">
+    
+    <div class="sidebar d-flex flex-column flex-shrink-0 p-3 text-white bg-dark-red" style="width: 260px;">
+      <span class="fs-4 fw-bold mb-3">🔥 SiGAS PRO</span>
+      <div class="small text-white-50 mb-3">User: <strong id="display-user">Admin</strong></div>
+      <hr>
+      <ul class="nav nav-pills flex-column mb-auto gap-2">
+        <li><a href="javascript:void(0)" onclick="showPage('dashboard')" class="nav-link text-white active" id="nav-dashboard"><i class="material-icons me-2 align-middle">dashboard</i> Dashboard</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('kasir')" class="nav-link text-white" id="nav-kasir"><i class="material-icons me-2 align-middle">point_of_sale</i> Kasir Jual</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('pembelian')" class="nav-link text-white" id="nav-pembelian"><i class="material-icons me-2 align-middle">shopping_cart</i> Stok Masuk</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('produk')" class="nav-link text-white" id="nav-produk"><i class="material-icons me-2 align-middle">inventory_2</i> Produk</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('keuangan')" class="nav-link text-white" id="nav-keuangan"><i class="material-icons me-2 align-middle">account_balance_wallet</i> Arus Kas</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('payroll')" class="nav-link text-white" id="nav-payroll"><i class="material-icons me-2 align-middle">badge</i> Payroll</a></li>
+        <li><a href="javascript:void(0)" onclick="showPage('laporan')" class="nav-link text-white" id="nav-laporan"><i class="material-icons me-2 align-middle">assessment</i> Laporan</a></li>
+      </ul>
+      <button onclick="logout()" class="btn btn-outline-light w-100 mt-4"><i class="material-icons align-middle">logout</i> Keluar</button>
+    </div>
+
+    <div class="content flex-grow-1 p-4 bg-light overflow-auto">
+      
+      <div id="page-dashboard" class="page-section">
+        <h3 class="fw-bold mb-4">Dashboard</h3>
+        <div class="row g-4">
+          <div class="col-md-4"><div class="card p-3 border-start border-5 border-success shadow-sm"><h6>Pemasukan</h6><h3 class="text-success fw-bold" id="dash-income">Rp 0</h3></div></div>
+          <div class="col-md-4"><div class="card p-3 border-start border-5 border-danger shadow-sm"><h6>Pengeluaran</h6><h3 class="text-danger fw-bold" id="dash-expense">Rp 0</h3></div></div>
+          <div class="col-md-4"><div class="card p-3 border-start border-5 border-primary shadow-sm"><h6>Laba Bersih</h6><h3 class="text-primary fw-bold" id="dash-net">Rp 0</h3></div></div>
+        </div>
+      </div>
+
+      <div id="page-kasir" class="page-section d-none">
+        <div class="card shadow-sm border-0 p-4" style="max-width: 800px;">
+          <h4 class="fw-bold mb-3">Kasir Penjualan</h4>
+          <div class="row mb-3">
+             <div class="col"><label>Pelanggan</label><select id="kasir-pelanggan" class="form-select"><option>Umum</option></select></div>
+             <div class="col"><label>Tipe</label><select id="kasir-tipe" class="form-select"><option value="Tukar (Refill)">Tukar (Refill)</option><option value="Beli Tabung Baru">Tabung Baru</option></select></div>
+          </div>
+          <div class="mb-3"><label>Produk</label><select id="kasir-produk" class="form-select form-select-lg" onchange="updateHargaJual()"></select></div>
+          <div class="mb-3"><label>Qty</label><input type="number" id="kasir-qty" class="form-control" value="1" oninput="updateHargaJual()"></div>
+          <div class="d-flex justify-content-between align-items-center mt-4">
+             <h3>Total: <span class="text-danger fw-bold" id="kasir-total">Rp 0</span></h3>
+             <button onclick="prosesJual()" class="btn btn-danger btn-lg">BAYAR</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-produk" class="page-section d-none">
+        <div class="d-flex justify-content-between mb-3"><h3 class="fw-bold">Data Produk</h3><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProduk">+ Produk</button></div>
+        <table class="table table-hover bg-white shadow-sm rounded" id="tabel-produk">
+          <thead class="table-light"><tr><th>Nama</th><th>Jual</th><th>Beli</th><th>Isi</th><th>Kosong</th><th>Aksi</th></tr></thead><tbody></tbody>
+        </table>
+      </div>
+
+      <div id="page-pembelian" class="page-section d-none">
+         <div class="d-flex justify-content-between mb-3">
+            <h3 class="fw-bold">Pembelian Stok</h3>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalSupplier">+ Supplier Baru</button>
+         </div>
+         <div class="card p-4 border-0 shadow-sm">
+            <div class="row mb-3">
+               <div class="col-md-6"><label>Supplier</label><select id="beli-supplier" class="form-select"></select></div>
+               <div class="col-md-6"><label>Mode Stok</label><div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="beli-tukar" checked><label class="form-check-label">Tukar Tabung Kosong?</label></div></div>
+            </div>
+            <div class="mb-3"><label>Produk</label><select id="beli-produk" class="form-select" onchange="updateHargaBeli()"></select></div>
+            <div class="row mb-3">
+               <div class="col"><label>Qty</label><input type="number" id="beli-qty" class="form-control" value="10" oninput="updateHargaBeli()"></div>
+               <div class="col"><label>Harga Beli (Auto)</label><input type="number" id="beli-harga" class="form-control"></div>
+            </div>
+            <div class="alert alert-warning">Total: <strong id="beli-total">Rp 0</strong></div>
+            <button onclick="prosesBeli()" class="btn btn-primary w-100">SIMPAN</button>
+         </div>
+      </div>
+
+      <div id="page-keuangan" class="page-section d-none">
+        <div class="d-flex justify-content-between mb-3"><h3 class="fw-bold">Arus Kas</h3><button class="btn btn-primary" onclick="bukaModalKeuangan()">+ Catat</button></div>
+        <table class="table table-striped bg-white shadow-sm" id="tabel-keuangan"><thead class="table-dark"><tr><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Nominal</th><th>Ket</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div id="page-payroll" class="page-section d-none">
+         <h3 class="fw-bold mb-3">Manajemen SDM</h3>
+         <ul class="nav nav-tabs mb-4" id="payrollTabs">
+            <li class="nav-item"><button class="nav-link active" onclick="switchTab('karyawan')">Data Karyawan</button></li>
+            <li class="nav-item"><button class="nav-link" onclick="switchTab('kasbon')">Kasbon</button></li>
+            <li class="nav-item"><button class="nav-link" onclick="switchTab('gaji')">Hitung Gaji</button></li>
+         </ul>
+         
+         <div id="tab-karyawan" class="tab-content">
+            <div class="d-flex justify-content-between mb-2"><h5>List Karyawan</h5><button class="btn btn-success btn-sm" onclick="modalKaryawan()">+ Tambah</button></div>
+            <table class="table bg-white shadow-sm" id="tabel-karyawan"><thead><tr><th>Nama</th><th>HP</th><th>Gaji</th><th>Bonus</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+         </div>
+         
+         <div id="tab-kasbon" class="tab-content d-none">
+            <div class="row">
+               <div class="col-md-4">
+                  <div class="card p-3 shadow-sm border-0">
+                     <h6>Input Kasbon</h6><hr>
+                     <select id="kasbon-nama" class="form-select mb-2"></select>
+                     <input type="number" id="kasbon-nominal" class="form-control mb-2" placeholder="Nominal">
+                     <input id="kasbon-ket" class="form-control mb-2" placeholder="Ket">
+                     <button onclick="simpanKasbon()" class="btn btn-warning w-100">Simpan</button>
+                  </div>
+               </div>
+               <div class="col-md-8">
+                  <h6>Riwayat Belum Lunas</h6>
+                  <table class="table bg-white shadow-sm" id="tabel-kasbon"><thead><tr><th>Tgl</th><th>Nama</th><th>Jml</th></tr></thead><tbody></tbody></table>
+               </div>
+            </div>
+         </div>
+         
+         <div id="tab-gaji" class="tab-content d-none">
+            <button class="btn btn-success mb-3 w-100" onclick="loadHitungGaji()">🔄 Hitung Gaji Bulan Ini</button>
+            <table class="table table-bordered bg-white shadow-sm" id="tabel-hitung-gaji"><thead><tr><th>Nama</th><th>Gaji</th><th>Bonus</th><th>Kasbon</th><th>Terima</th></tr></thead><tbody></tbody></table>
+            <button onclick="cairkanGaji()" class="btn btn-primary w-100 mt-2 fw-bold">CAIRKAN & CATAT</button>
+         </div>
+      </div>
+      
+      <div id="page-laporan" class="page-section d-none">
+         <h3 class="fw-bold">Laporan</h3>
+         <div class="card p-4 text-center shadow-sm">
+            <h1 class="text-success" id="lap-net">Rp 0</h1><p>Profit All Time</p>
+         </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalProduk" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Produk</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+    <input id="prod-nama" class="form-control mb-2" placeholder="Nama">
+    <input id="prod-jual" type="number" class="form-control mb-2" placeholder="Jual">
+    <input id="prod-beli" type="number" class="form-control mb-2" placeholder="Beli">
+    <div class="row"><div class="col"><input id="prod-isi" type="number" class="form-control" placeholder="Stok Isi"></div><div class="col"><input id="prod-kosong" type="number" class="form-control" placeholder="Stok Kosong"></div></div>
+  </div><div class="modal-footer"><button onclick="simpanProduk()" class="btn btn-primary">Simpan</button></div></div></div></div>
+
+  <div class="modal fade" id="modalKaryawan" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Karyawan</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+    <input type="hidden" id="kry-id">
+    <input id="kry-nama" class="form-control mb-2" placeholder="Nama">
+    <input id="kry-hp" class="form-control mb-2" placeholder="HP">
+    <input id="kry-gaji" type="number" class="form-control mb-2" placeholder="Gaji Pokok">
+    <input id="kry-bonus" type="number" class="form-control mb-2" placeholder="Bonus">
+  </div><div class="modal-footer"><button onclick="simpanKaryawanDB()" class="btn btn-primary">Simpan</button></div></div></div></div>
+  
+  <div class="modal fade" id="modalSupplier" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Supplier</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="sup-nama" class="form-control mb-2" placeholder="Nama"><input id="sup-hp" class="form-control mb-2" placeholder="HP"><input id="sup-alamat" class="form-control" placeholder="Alamat"></div><div class="modal-footer"><button onclick="simpanSupplier()" class="btn btn-primary">Simpan</button></div></div></div></div>
+  
+  <div class="modal fade" id="modalKeuangan" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>Catat</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">
+    <select id="keu-jenis" class="form-select mb-2"><option>Pengeluaran</option><option>Pemasukan</option></select>
+    <div class="input-group mb-2"><select id="keu-kategori" class="form-select"></select><button class="btn btn-outline-secondary" onclick="tambahKategoriBaru()">+</button></div>
+    <input type="number" id="keu-nominal" class="form-control mb-2" placeholder="Rp">
+    <input id="keu-ket" class="form-control" placeholder="Ket">
+  </div><div class="modal-footer"><button onclick="simpanKeuangan()" class="btn btn-primary">Simpan</button></div></div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <?!= include('javascript'); ?>
+</body>
+</html>
