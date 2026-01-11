@@ -87,35 +87,68 @@ function hapusProduk(nama) {
   }
 }
 
-// --- TRANSAKSI (JUAL) ---
+// [Ganti fungsi simpanTransaksi yang lama dengan ini]
+
 function simpanTransaksi(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const prodSheet = ss.getSheetByName('PRODUK');
   const prodData = prodSheet.getDataRange().getValues();
+  let status = "Gagal";
   
-  // 1. Catat Transaksi
-  ss.getSheetByName('TRANSAKSI').appendRow([
-    'TRX-' + Date.now(), new Date(), data.pelanggan, data.produkNama, data.qty, data.total, data.tipe, data.kasir
-  ]);
-  
-  // 2. Update Stok
+  // 1. Validasi Stok & Update (Atomic Check)
   for (let i = 1; i < prodData.length; i++) {
     if (prodData[i][1] == data.produkNama) { 
       let curIsi = Number(prodData[i][4]);
       let curKosong = Number(prodData[i][5]);
       
-      if (data.tipe === 'Tukar (Refill)') {
-        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty);     
-        prodSheet.getRange(i + 1, 6).setValue(curKosong + Number(data.qty)); 
-      } else {
-        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty); 
+      // VALIDASI STOK ISI (Server Side)
+      if (curIsi < data.qty) {
+        throw new Error("Stok Habis! Sisa stok di sistem: " + curIsi);
       }
+
+      // Update Stok Berdasarkan Tipe
+      if (data.tipe === 'Tukar (Refill)') {
+        // Alur: Stok Isi Berkurang, Stok Kosong Bertambah (Dapat dari User)
+        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty); // Update Isi
+        prodSheet.getRange(i + 1, 6).setValue(curKosong + Number(data.qty)); // Update Kosong
+      } else {
+        // Alur: Beli Tabung Baru (Stok Isi/Unit Fisik Berkurang)
+        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty);
+        // Stok kosong tidak berubah karena tabung keluar fisik selamanya
+      }
+      
+      status = "Sukses";
       break;
     }
   }
   
-  // 3. Auto Keuangan
-  ss.getSheetByName('KEUANGAN').appendRow(['AUTO-' + Date.now(), new Date(), 'Pemasukan', 'Penjualan Gas', data.total, 'Jual: ' + data.produkNama]);
+  if (status === "Sukses") {
+    // 2. Catat Transaksi (Laporan Harian)
+    ss.getSheetByName('TRANSAKSI').appendRow([
+      'TRX-' + Date.now(), 
+      new Date(), 
+      data.pelanggan, 
+      data.produkNama, 
+      data.qty, 
+      data.total, 
+      data.tipe, 
+      data.kasir
+    ]);
+
+    // 3. Auto Keuangan (Masuk Laporan Arus Kas)
+    ss.getSheetByName('KEUANGAN').appendRow([
+      'AUTO-' + Date.now(), 
+      new Date(), 
+      'Pemasukan', 
+      'Penjualan Gas', 
+      data.total, 
+      `Jual (${data.tipe}): ${data.produkNama}`
+    ]);
+    
+    return "Transaksi Berhasil Disimpan";
+  } else {
+    throw new Error("Produk tidak ditemukan");
+  }
 }
 
 // --- PEMBELIAN (BELI) ---
