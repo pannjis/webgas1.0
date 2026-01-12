@@ -153,10 +153,161 @@ function simpanTransaksiBulk(dataTransaksi) {
 }
 
 // 2. Ambil Riwayat Transaksi
+// --- Code.gs ---
+
 function getRiwayatTransaksi() {
-  // Mengambil 50 transaksi terakhir
-  const data = getData('TRANSAKSI').reverse().slice(0, 50);
-  return data;
+  const data = getData('TRANSAKSI'); // Ambil semua data
+  
+  // Objek penampung untuk pengelompokan
+  let grouped = {};
+
+  data.forEach(row => {
+    let id = row[0];
+    
+    // Konversi Tanggal agar aman dikirim ke browser
+    let waktuStr = row[1];
+    if (row[1] instanceof Date) {
+       waktuStr = row[1].toISOString();
+    }
+
+    // Jika ID belum ada di penampung, buat baru
+    if (!grouped[id]) {
+      grouped[id] = {
+        id: id,
+        waktu: waktuStr,
+        pelanggan: row[2],
+        kasir: row[7],
+        totalBayar: 0,  // Nanti dijumlahkan
+        items: []       // Array untuk menyimpan detail barang
+      };
+    }
+
+    // Tambahkan detail item ke transaksi tersebut
+    grouped[id].items.push({
+      produk: row[3],
+      qty: row[4],
+      hargaTotal: row[5],
+      tipe: row[6],
+      status: row[8]
+    });
+
+    // Akumulasi Total Bayar (Hanya jika status bukan Retur Full, opsional)
+    grouped[id].totalBayar += Number(row[5]);
+  });
+
+  // Ubah Object menjadi Array dan urutkan dari yang terbaru (Descending)
+  const result = Object.values(grouped).sort((a, b) => {
+      return new Date(b.waktu) - new Date(a.waktu);
+  });
+
+  // Ambil 50 transaksi terakhir saja agar ringan
+  return result.slice(0, 50);
+}
+
+// --- Code.gs ---
+
+// 1. GET RIWAYAT PEMBELIAN (Grouping per ID)
+function getRiwayatPembelian() {
+  const data = getData('PEMBELIAN');
+  let grouped = {};
+
+  data.forEach(row => {
+    let id = row[0];
+    let waktuStr = row[1] instanceof Date ? row[1].toISOString() : row[1];
+
+    if (!grouped[id]) {
+      grouped[id] = {
+        id: id,
+        waktu: waktuStr,
+        pelanggan: row[2], // Di sheet PEMBELIAN kolom ini adalah Supplier
+        totalBayar: 0,
+        items: []
+      };
+    }
+
+    // Sheet PEMBELIAN: ID, Waktu, Supplier, Produk, Qty, Total, Metode
+    grouped[id].items.push({
+      produk: row[3],
+      qty: row[4],
+      hargaTotal: row[5],
+      tipe: 'Stok Masuk', // Default tipe
+      status: 'Sukses' 
+    });
+    
+    grouped[id].totalBayar += Number(row[5]);
+  });
+
+  return Object.values(grouped).sort((a, b) => new Date(b.waktu) - new Date(a.waktu)).slice(0, 50);
+}
+
+// 2. FUNGSI RETUR BARU (Support Partial & Jenis Transaksi)
+function prosesReturBaru(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const prodSheet = ss.getSheetByName('PRODUK');
+  const keuSheet = ss.getSheetByName('KEUANGAN');
+  
+  // Tentukan Sheet Target berdasarkan jenis
+  const targetSheetName = payload.jenis === 'JUAL' ? 'TRANSAKSI' : 'PEMBELIAN';
+  const trxSheet = ss.getSheetByName(targetSheetName);
+  const trxData = trxSheet.getDataRange().getValues();
+  const prodData = prodSheet.getDataRange().getValues();
+
+  let totalRefund = 0;
+  let logItem = [];
+
+  // Loop item yang diretur
+  payload.items.forEach(returItem => {
+    if(returItem.qtyRetur > 0) {
+      
+      // A. UPDATE STOK PRODUK
+      for (let i = 1; i < prodData.length; i++) {
+        if (prodData[i][1] == returItem.produk) {
+           let curIsi = Number(prodData[i][4]);
+           let curKosong = Number(prodData[i][5]);
+           
+           if(payload.jenis === 'JUAL') {
+              // Retur Penjualan: Stok Isi KEMBALI (+), Stok Kosong BERKURANG (karena sebelumnya tukar)
+              prodSheet.getRange(i+1, 5).setValue(curIsi + returItem.qtyRetur);
+              // Cek jika itu refill, tabung kosong dikembalikan ke pelanggan (stok kita berkurang)
+              if(returItem.tipe && returItem.tipe.includes('Refill')) {
+                 prodSheet.getRange(i+1, 6).setValue(curKosong - returItem.qtyRetur);
+              }
+           } else {
+              // Retur Pembelian: Stok Isi BERKURANG (-) (Balikin ke supplier)
+              prodSheet.getRange(i+1, 5).setValue(curIsi - returItem.qtyRetur);
+              // Jika beli tukar tabung, stok kosong kita bertambah lagi (dibalikin supplier)
+               // (Sederhananya kita kurangi stok isi saja dulu untuk keamanan)
+           }
+           break;
+        }
+      }
+
+      // B. UPDATE STATUS TRANSAKSI (Tandai Retur)
+      // Cari baris transaksi spesifik
+      for(let i=1; i<trxData.length; i++) {
+         if(trxData[i][0] == payload.idTrx && trxData[i][3] == returItem.produk) {
+             // Opsional: Bisa update kolom qty atau tambah catatan "Retur Partial"
+             // Disini kita biarkan record asli, tapi catat di Keuangan sebagai pengurang
+         }
+      }
+      
+      totalRefund += (returItem.hargaSatuan * returItem.qtyRetur);
+      logItem.push(`${returItem.produk} (x${returItem.qtyRetur})`);
+    }
+  });
+
+  // C. CATAT DI KEUANGAN (Balance)
+  if(totalRefund > 0) {
+     if(payload.jenis === 'JUAL') {
+        // Retur Jual = Uang Keluar (Refund ke Pelanggan)
+        keuSheet.appendRow(['RET-' + Date.now(), new Date(), 'Pengeluaran', 'Retur Penjualan', totalRefund, `Retur TRX: ${payload.idTrx}. ${payload.alasan}`]);
+     } else {
+        // Retur Beli = Uang Masuk (Refund dari Supplier)
+        keuSheet.appendRow(['RET-' + Date.now(), new Date(), 'Pemasukan', 'Retur Pembelian', totalRefund, `Retur BELI: ${payload.idTrx}. ${payload.alasan}`]);
+     }
+  }
+
+  return "Retur Berhasil Diproses!";
 }
 
 function simpanPelanggan(form) {
