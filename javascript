@@ -1,9 +1,79 @@
 <script>
   let currentUser = {};
   let payrollDataTemp = [];
+  let keranjangBelanja = [];
+  let globalModalObj;
+  let onConfirmAction = null;
   const rupiah = (n) => new Intl.NumberFormat('id-ID', {style: 'currency', currency: 'IDR', minimumFractionDigits:0}).format(n);
 
   window.onload = function() { google.script.run.setupDatabase(); };
+
+  function initModal() {
+     if(!globalModalObj) globalModalObj = new bootstrap.Modal(document.getElementById('globalModal'));
+  }
+
+  // 1. PENGGANTI ALERT (Hanya Tombol OK)
+  function myAlert(title, message, type = 'info') {
+     initModal();
+     document.getElementById('globalModalTitle').innerText = title;
+     document.getElementById('globalModalBody').innerText = message;
+     document.getElementById('btn-cancel').classList.add('d-none'); // Sembunyikan tombol Batal
+     
+     const btnOk = document.getElementById('btn-confirm');
+     btnOk.innerText = "OK";
+     btnOk.onclick = () => globalModalObj.hide();
+
+     // Styling Warna Header & Icon
+     const header = document.getElementById('globalModalHeader');
+     const icon = document.getElementById('globalModalIcon');
+     header.className = 'modal-header text-white'; // Reset
+     
+     if(type === 'error') {
+        header.classList.add('bg-danger');
+        icon.innerText = 'error_outline';
+        icon.style.color = '#dc3545';
+        btnOk.className = 'btn btn-danger px-4';
+     } else if (type === 'success') {
+        header.classList.add('bg-success');
+        icon.innerText = 'check_circle';
+        icon.style.color = '#198754';
+        btnOk.className = 'btn btn-success px-4';
+     } else {
+        header.classList.add('bg-primary');
+        icon.innerText = 'info';
+        icon.style.color = '#0d6efd';
+        btnOk.className = 'btn btn-primary px-4';
+     }
+
+     globalModalObj.show();
+  }
+
+  // 2. PENGGANTI CONFIRM (Tombol Ya & Batal)
+  function myConfirm(title, message, callback) {
+     initModal();
+     document.getElementById('globalModalTitle').innerText = title;
+     document.getElementById('globalModalBody').innerText = message;
+     document.getElementById('btn-cancel').classList.remove('d-none'); // Munculkan tombol Batal
+     
+     // Styling
+     const header = document.getElementById('globalModalHeader');
+     const icon = document.getElementById('globalModalIcon');
+     header.className = 'modal-header text-white bg-warning'; // Warna kuning untuk warning
+     icon.innerText = 'help_outline';
+     icon.style.color = '#ffc107';
+
+     const btnYes = document.getElementById('btn-confirm');
+     btnYes.innerText = "YA, LANJUTKAN";
+     btnYes.className = 'btn btn-warning fw-bold px-4';
+     
+     // Set Action saat klik YA
+     btnYes.onclick = () => {
+        globalModalObj.hide();
+        if(callback) callback(); // Jalankan fungsi yang dikirim
+     };
+
+     globalModalObj.show();
+  }
   
   // --- FUNGSI LOADING (ANIMASI) ---
   function loading(status) {
@@ -17,17 +87,32 @@
     }
   }
 
-  function showPage(pageId) {
+function showPage(pageId) {
+    // 1. Logika Ganti Halaman (UI)
     document.querySelectorAll('.page-section').forEach(el => el.classList.add('d-none'));
     document.getElementById('page-' + pageId).classList.remove('d-none');
+    
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-    document.getElementById('nav-' + pageId).classList.add('active');
+    // Cek element nav ada atau tidak sebelum add class active (untuk menghindari error null)
+    const navEl = document.getElementById('nav-' + pageId);
+    if(navEl) navEl.classList.add('active');
 
+    // 2. Logika Muat Data (Data Fetching)
     if(pageId === 'dashboard' || pageId === 'laporan') loadDashboard();
-    if(pageId === 'produk' || pageId === 'kasir') loadProduk();
+    
+    // Update bagian Kasir: Muat Produk DAN Pelanggan
+    if(pageId === 'produk' || pageId === 'kasir') {
+        loadProduk();
+        if(pageId === 'kasir') loadPelangganDropdown();
+    }
+    
     if(pageId === 'keuangan') loadKeuangan();
     if(pageId === 'pembelian') loadPembelianData();
     if(pageId === 'payroll') switchTab('karyawan');
+    if(pageId === 'riwayat') loadRiwayatData();
+    
+    // --- INI YANG KETINGGALAN ---
+    if(pageId === 'pelanggan') loadPelanggan(); 
   }
 
   // --- AUTH ---
@@ -46,11 +131,11 @@
         document.getElementById('display-user').innerText = res.nama;
         showPage('dashboard');
       } else { 
-          alert('Gagal Login'); 
+          myAlert('Gagal Masuk', 'Username atau Password salah!', 'error');
       }
     }).withFailureHandler(e => {
         loading(false);
-        alert('Error Koneksi: ' + e);
+        myAlert('Error Koneksi', e, 'error');
     }).loginUser(u, p);
   }
   
@@ -113,16 +198,16 @@
     }).tambahProduk(d);
   }
 
-  function hapusProduk(n) { 
-      if(confirm('Hapus?')) {
+function hapusProduk(n) { 
+      myConfirm('Hapus Produk', `Yakin hapus produk ${n}?`, () => {
           loading(true);
           google.script.run.withSuccessHandler(() => {
               loading(false);
               loadProduk();
-          }).hapusProduk(n); 
-      }
+              myAlert('Info', 'Produk dihapus', 'success');
+          }).hapusProduk(n);
+      });
   }
-
   function updateHargaJual() {
     const sel = document.getElementById('kasir-produk');
     const price = sel.options[sel.selectedIndex]?.getAttribute('data-price') || 0;
@@ -130,56 +215,203 @@
     document.getElementById('kasir-total').innerText = rupiah(price * qty);
   }
 
-  // --- KASIR (ALUR BARU) ---
-  function prosesJual() {
+function tambahKeKeranjang() {
     const p = document.getElementById('kasir-produk');
     const qtyInput = document.getElementById('kasir-qty');
     const tipe = document.getElementById('kasir-tipe').value;
     
-    if(!p.value) return alert('Pilih Produk dulu!');
-    if(qtyInput.value < 1) return alert('Jumlah minimal 1!');
-
+    // GANTI ALERT BIASA
+    if(!p.value) return myAlert('Perhatian', 'Silakan pilih produk terlebih dahulu.', 'error');
+    if(!qtyInput.value || qtyInput.value < 1) return myAlert('Perhatian', 'Jumlah (Qty) minimal 1!', 'error');
+    
     const price = Number(p.options[p.selectedIndex].getAttribute('data-price') || 0);
     const currentStok = Number(p.options[p.selectedIndex].getAttribute('data-stok') || 0);
-    const qty = Number(qtyInput.value);
-    const totalBayar = price * qty;
+    const qtyInputan = Number(qtyInput.value);
+    
+    let indexFound = keranjangBelanja.findIndex(item => item.produkNama === p.value && item.tipe === tipe);
 
-    // VALIDASI STOK
-    if (qty > currentStok) {
-        alert(`Stok tidak cukup! Permintaan: ${qty}, Sisa Stok: ${currentStok}`);
-        return;
+    if (indexFound !== -1) {
+       let itemExisting = keranjangBelanja[indexFound];
+       let totalQtyBaru = itemExisting.qty + qtyInputan;
+
+       // GANTI ALERT STOK
+       if (totalQtyBaru > currentStok) {
+          return myAlert('Stok Tidak Cukup', `Di keranjang: ${itemExisting.qty}\nDitambah: ${qtyInputan}\nTotal butuh: ${totalQtyBaru}\nSisa Stok: ${currentStok}`, 'error');
+       }
+       
+       keranjangBelanja[indexFound].qty = totalQtyBaru;
+       keranjangBelanja[indexFound].total = totalQtyBaru * price;
+
+    } else {
+       // GANTI ALERT STOK BARU
+       if(qtyInputan > currentStok) return myAlert('Stok Habis', `Permintaan: ${qtyInputan}, Sisa Stok: ${currentStok}`, 'error');
+
+       keranjangBelanja.push({ produkNama: p.value, qty: qtyInputan, tipe: tipe, hargaSatuan: price, total: qtyInputan * price });
     }
 
-    // VALIDASI TABUNG KOSONG
-    if (tipe === 'Tukar (Refill)') {
-        let confirmKosong = confirm(`Transaksi Refill:\nApakah Anda sudah menerima ${qty} tabung kosong dari pelanggan?`);
-        if (!confirmKosong) return;
-    }
+    renderKeranjang();
+    p.value = "";
+    qtyInput.value = "";
+    document.getElementById('kasir-total').innerText = "Rp 0";
+    p.focus();
+  }
 
-    const d = { 
-        pelanggan: document.getElementById('kasir-pelanggan').value, 
-        produkNama: p.value, 
-        qty: qty, 
-        total: totalBayar, 
-        tipe: tipe, 
-        kasir: currentUser.nama 
+  function renderKeranjang() {
+    const tb = document.querySelector('#tabel-keranjang tbody');
+    tb.innerHTML = '';
+    let grandTotal = 0;
+
+    keranjangBelanja.forEach((item, index) => {
+      grandTotal += item.total;
+      tb.innerHTML += `
+        <tr>
+          <td>${item.produkNama}</td>
+          <td><small>${item.tipe}</small></td>
+          <td>${item.qty}</td>
+          <td>${rupiah(item.total)}</td>
+          <td><button class="btn btn-sm btn-danger py-0" onclick="hapusItemKeranjang(${index})">x</button></td>
+        </tr>
+      `;
+    });
+
+    document.getElementById('label-grand-total').innerText = rupiah(grandTotal);
+  }
+
+  function hapusItemKeranjang(index) {
+    keranjangBelanja.splice(index, 1);
+    renderKeranjang();
+  }
+
+  function resetKeranjang() {
+    keranjangBelanja = [];
+    renderKeranjang();
+  }
+
+function prosesBayarFinal() {
+    if(keranjangBelanja.length === 0) return myAlert('Keranjang Kosong', 'Belum ada barang yang diinput.', 'error');
+    
+    // Cek Tabung Kosong
+    let butuhTabungKosong = 0;
+    keranjangBelanja.forEach(k => { if(k.tipe === 'Tukar (Refill)') butuhTabungKosong += k.qty; });
+
+    // --- FUNGSI PEMBAYARAN UTAMA ---
+    const eksekusiBayar = () => {
+        const totalBayarStr = document.getElementById('label-grand-total').innerText;
+        
+        // Konfirmasi Kedua: Total Bayar
+        myConfirm('Konfirmasi Pembayaran', `Total Transaksi: ${totalBayarStr}\n\nSimpan data ini?`, () => {
+            
+            const payload = {
+              pelanggan: document.getElementById('kasir-pelanggan').value,
+              kasir: currentUser.nama || 'Admin',
+              items: keranjangBelanja
+            };
+
+            loading(true);
+            google.script.run.withSuccessHandler(res => {
+               loading(false);
+               myAlert('Berhasil', res, 'success'); 
+               resetKeranjang();
+               loadProduk(); 
+            }).withFailureHandler(err => {
+               loading(false);
+               myAlert('Gagal', err, 'error');
+            }).simpanTransaksiBulk(payload);
+
+        });
     };
 
-    if(confirm(`Total: ${rupiah(totalBayar)}\n\nBayar sekarang?`)) {
-        loading(true);
-        google.script.run.withSuccessHandler((res) => { 
-            loading(false);
-            alert(res); 
-            document.getElementById('kasir-qty').value = 1;
-            document.getElementById('kasir-total').innerText = 'Rp 0';
-            loadProduk(); 
-        })
-        .withFailureHandler((err) => {
-            loading(false);
-            alert("Gagal: " + err);
-        })
-        .simpanTransaksi(d);
+    // --- LOGIC PENGECEKAN TABUNG ---
+    if(butuhTabungKosong > 0) {
+       // Konfirmasi Pertama: Tabung Kosong
+       myConfirm('Cek Fisik Tabung', `Transaksi ini ada Refill.\nApakah Anda sudah menerima ${butuhTabungKosong} Tabung Kosong dari pelanggan?`, () => {
+           
+           // --- PERBAIKAN DI SINI: PAKAI SETTIMEOUT ---
+           // Beri jeda 500ms (0.5 detik) agar modal pertama nutup dulu dengan mulus
+           setTimeout(() => {
+               eksekusiBayar();
+           }, 500); 
+           // -------------------------------------------
+
+       });
+    } else {
+       // Jika tidak butuh tabung, langsung bayar
+       eksekusiBayar();
     }
+  }
+
+  // --- RIWAYAT TRANSAKSI ---
+
+function loadRiwayatData() {
+    loading(true);
+    google.script.run.withSuccessHandler(data => {
+       loading(false);
+       
+       // --- PENGAMAN ---
+       if (!data) return;
+
+       const tb = document.querySelector('#tabel-riwayat tbody');
+       tb.innerHTML = '';
+       
+       data.forEach(row => {
+          const tgl = new Date(row[1]).toLocaleString();
+          const isRetur = row[8] && row[8].includes('Retur');
+          const style = isRetur ? 'text-decoration: line-through; color: red;' : '';
+          
+          tb.innerHTML += `
+            <tr style="${style}">
+               <td><small class="fw-bold">${row[0]}</small><br><small text-muted>${tgl}</small></td>
+               <td>${row[2]}</td>
+               <td>${row[3]} <br> <span class="badge bg-secondary">${row[6]}</span></td>
+               <td>${row[4]}</td>
+               <td class="fw-bold">${rupiah(row[5])}</td>
+               <td>
+                 ${!isRetur ? `
+                 <button class="btn btn-sm btn-outline-danger" onclick="aksiRetur('${row[0]}', '${row[3]}', ${row[4]}, '${row[6]}')">Retur</button>
+                 ` : '<span class="badge bg-danger">Sudah Retur</span>'}
+               </td>
+            </tr>
+          `;
+       });
+    }).getRiwayatTransaksi();
+  }
+
+function aksiRetur(id, produk, qty, tipe) {
+     myConfirm('Retur Barang', `Yakin ingin membatalkan/retur item ini?\n\n${produk} (${qty})\n\nStok akan dikembalikan ke sistem.`, () => {
+        loading(true);
+        google.script.run.withSuccessHandler(res => {
+           loading(false);
+           myAlert('Sukses', res, 'success');
+           loadRiwayatData();
+           loadProduk(); 
+        }).prosesRetur(id, produk, qty, tipe, 'PARTIAL');
+     });
+  }
+
+  function filterRiwayat() {
+    const k = document.getElementById('cari-trx').value.toLowerCase();
+    document.querySelectorAll('#tabel-riwayat tbody tr').forEach(tr => {
+       tr.style.display = tr.innerText.toLowerCase().includes(k) ? '' : 'none';
+    });
+  }
+
+  function aksiRetur(id, produk, qty, tipe) {
+     if(confirm(`Yakin ingin meretur/membatalkan item ini?\n\n${produk} (${qty})\n\nStok akan dikembalikan.`)) {
+        loading(true);
+        google.script.run.withSuccessHandler(res => {
+           loading(false);
+           alert(res);
+           loadRiwayatData();
+           loadProduk(); // Update stok
+        }).prosesRetur(id, produk, qty, tipe, 'PARTIAL');
+     }
+  }
+
+  function filterRiwayat() {
+    const k = document.getElementById('cari-trx').value.toLowerCase();
+    document.querySelectorAll('#tabel-riwayat tbody tr').forEach(tr => {
+       tr.style.display = tr.innerText.toLowerCase().includes(k) ? '' : 'none';
+    });
   }
 
   // --- PEMBELIAN ---
@@ -208,6 +440,122 @@
             loadProduk(); 
         }).simpanPembelian(d);
     }
+  }
+
+function loadPelanggan() {
+    loading(true);
+    google.script.run.withSuccessHandler(data => {
+      loading(false);
+
+      // --- PENGAMAN ---
+      if (!data) return;
+
+      const tb = document.querySelector('#tabel-pelanggan tbody');
+      tb.innerHTML = '';
+      data.forEach(r => {
+        tb.innerHTML += `
+          <tr>
+            <td class="fw-bold">${r[1]}</td>
+            <td>${r[2]}</td>
+            <td>${r[3]}<br><small class="text-muted">${r[4]}</small></td>
+            <td>
+               <button class="btn btn-sm btn-warning" onclick="editPelanggan('${r[0]}','${r[1]}','${r[2]}','${r[3]}','${r[4]}')"><i class="material-icons" style="font-size:14px">edit</i></button>
+               <button class="btn btn-sm btn-danger" onclick="hapusPelanggan('${r[0]}')"><i class="material-icons" style="font-size:14px">delete</i></button>
+            </td>
+          </tr>`;
+      });
+    }).getData('PELANGGAN');
+  }
+
+  // Handle Modal (Bisa dari menu Pelanggan, bisa dari shortcut Kasir)
+  let isFromKasir = false; 
+
+  function modalPelanggan(fromKasir = false) {
+    isFromKasir = fromKasir;
+    document.getElementById('pel-id').value = '';
+    document.getElementById('pel-nama').value = '';
+    document.getElementById('pel-pt').value = '';
+    document.getElementById('pel-hp').value = '';
+    document.getElementById('pel-alamat').value = '';
+    new bootstrap.Modal(document.getElementById('modalPelanggan')).show();
+  }
+
+  function editPelanggan(id, nama, pt, hp, alamat) {
+    document.getElementById('pel-id').value = id;
+    document.getElementById('pel-nama').value = nama;
+    document.getElementById('pel-pt').value = pt;
+    document.getElementById('pel-hp').value = hp;
+    document.getElementById('pel-alamat').value = alamat;
+    new bootstrap.Modal(document.getElementById('modalPelanggan')).show();
+  }
+
+  function simpanPelangganDB() {
+    const d = {
+      id: document.getElementById('pel-id').value,
+      nama: document.getElementById('pel-nama').value,
+      pt: document.getElementById('pel-pt').value,
+      hp: document.getElementById('pel-hp').value,
+      alamat: document.getElementById('pel-alamat').value
+    };
+
+    if(!d.nama) return alert('Nama wajib diisi!');
+
+    loading(true);
+    google.script.run.withSuccessHandler(res => {
+       loading(false);
+       alert(res);
+       bootstrap.Modal.getInstance(document.getElementById('modalPelanggan')).hide();
+       
+       if(isFromKasir) {
+          // Jika input dari kasir, refresh dropdown kasir
+          loadPelangganDropdown(); 
+       } else {
+          // Jika dari menu admin, refresh tabel
+          loadPelanggan();
+       }
+    }).simpanPelanggan(d);
+  }
+
+function hapusPelanggan(id) {
+    myConfirm('Hapus Pelanggan', 'Apakah Anda yakin ingin menghapus data pelanggan ini?', () => {
+       loading(true);
+       google.script.run.withSuccessHandler(() => {
+         loading(false);
+         loadPelanggan();
+         myAlert('Sukses', 'Data Pelanggan berhasil dihapus', 'success');
+       }).hapusPelanggan(id);
+    });
+  }
+
+  function filterPelanggan() {
+    const k = document.getElementById('cari-pelanggan').value.toLowerCase();
+    document.querySelectorAll('#tabel-pelanggan tbody tr').forEach(tr => {
+       tr.style.display = tr.innerText.toLowerCase().includes(k) ? '' : 'none';
+    });
+  }
+
+  // --- INTEGRASI KE KASIR ---
+  
+function loadPelangganDropdown() {
+    // Jangan loading(true) agar tidak mengganggu UI
+    google.script.run.withSuccessHandler(data => {
+       // --- PENGAMAN: Cek jika data kosong/null ---
+       if (!data) return; 
+
+       const sel = document.getElementById('kasir-pelanggan');
+       const currentVal = sel.value; 
+       
+       sel.innerHTML = '<option value="Umum">Umum</option>';
+       
+       data.forEach(r => {
+          let label = r[1]; 
+          if(r[2]) label = `${r[2]} (${r[1]})`; 
+          sel.innerHTML += `<option value="${label}">${label}</option>`;
+       });
+
+       if(currentVal) sel.value = currentVal;
+
+    }).getListPelanggan();
   }
 
   // --- KEUANGAN ---
