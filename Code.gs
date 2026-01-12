@@ -87,68 +87,165 @@ function hapusProduk(nama) {
   }
 }
 
-// [Ganti fungsi simpanTransaksi yang lama dengan ini]
+// --- MODIFIKASI: TRANSAKSI & KASIR ---
 
-function simpanTransaksi(data) {
+// 1. Simpan Transaksi (BULK / BANYAK ITEM SEKALIGUS)
+function simpanTransaksiBulk(dataTransaksi) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const prodSheet = ss.getSheetByName('PRODUK');
-  const prodData = prodSheet.getDataRange().getValues();
-  let status = "Gagal";
+  const trxSheet = ss.getSheetByName('TRANSAKSI');
+  const keuSheet = ss.getSheetByName('KEUANGAN');
   
-  // 1. Validasi Stok & Update (Atomic Check)
-  for (let i = 1; i < prodData.length; i++) {
-    if (prodData[i][1] == data.produkNama) { 
-      let curIsi = Number(prodData[i][4]);
-      let curKosong = Number(prodData[i][5]);
-      
-      // VALIDASI STOK ISI (Server Side)
-      if (curIsi < data.qty) {
-        throw new Error("Stok Habis! Sisa stok di sistem: " + curIsi);
-      }
+  const prodData = prodSheet.getDataRange().getValues();
+  const idTrxMaster = 'TRX-' + Date.now(); // Satu ID untuk satu keranjang belanja
+  const waktu = new Date();
+  let totalBelanja = 0;
+  let summaryProduk = [];
 
-      // Update Stok Berdasarkan Tipe
-      if (data.tipe === 'Tukar (Refill)') {
-        // Alur: Stok Isi Berkurang, Stok Kosong Bertambah (Dapat dari User)
-        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty); // Update Isi
-        prodSheet.getRange(i + 1, 6).setValue(curKosong + Number(data.qty)); // Update Kosong
-      } else {
-        // Alur: Beli Tabung Baru (Stok Isi/Unit Fisik Berkurang)
-        prodSheet.getRange(i + 1, 5).setValue(curIsi - data.qty);
-        // Stok kosong tidak berubah karena tabung keluar fisik selamanya
+  // Loop setiap item di keranjang
+  dataTransaksi.items.forEach(item => {
+    let itemFound = false;
+    
+    // Update Stok
+    for (let i = 1; i < prodData.length; i++) {
+      if (prodData[i][1] == item.produkNama) {
+        let curIsi = Number(prodData[i][4]);
+        let curKosong = Number(prodData[i][5]);
+        
+        // Validasi Stok (Server Side)
+        if (curIsi < item.qty) throw new Error(`Stok ${item.produkNama} Habis! Sisa: ${curIsi}`);
+
+        // Update logic
+        let newIsi = curIsi - item.qty;
+        let newKosong = curKosong;
+        
+        if (item.tipe === 'Tukar (Refill)') {
+           newKosong = curKosong + Number(item.qty); // Terima tabung kosong
+        }
+        
+        prodSheet.getRange(i + 1, 5).setValue(newIsi);
+        prodSheet.getRange(i + 1, 6).setValue(newKosong);
+        itemFound = true;
+        break;
       }
-      
-      status = "Sukses";
-      break;
+    }
+    
+    if(!itemFound) throw new Error(`Produk ${item.produkNama} tidak ditemukan di database.`);
+
+    // Catat ke Sheet TRANSAKSI (Per Item)
+    // Format: ID_Trans, Waktu, Pelanggan, Produk, Qty, Total_Item, Tipe, Kasir, STATUS
+    trxSheet.appendRow([
+      idTrxMaster, waktu, dataTransaksi.pelanggan, item.produkNama, 
+      item.qty, item.total, item.tipe, dataTransaksi.kasir, 'Sukses'
+    ]);
+
+    totalBelanja += Number(item.total);
+    summaryProduk.push(`${item.produkNama} (${item.qty})`);
+  });
+
+  // Catat ke KEUANGAN (Satu baris per struk)
+  keuSheet.appendRow([
+    'FIN-' + idTrxMaster, waktu, 'Pemasukan', 'Penjualan Gas', 
+    totalBelanja, `Penjualan: ${summaryProduk.join(', ')}`
+  ]);
+
+  return "Transaksi Berhasil Disimpan!";
+}
+
+// 2. Ambil Riwayat Transaksi
+function getRiwayatTransaksi() {
+  // Mengambil 50 transaksi terakhir
+  const data = getData('TRANSAKSI').reverse().slice(0, 50);
+  return data;
+}
+
+function simpanPelanggan(form) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('PELANGGAN');
+  
+  // EDIT MODE
+  if(form.id) { 
+    const data = sheet.getDataRange().getValues();
+    for(let i=1; i<data.length; i++) {
+      if(data[i][0] == form.id) {
+        // Update: Nama, Perusahaan, HP, Alamat
+        sheet.getRange(i+1, 2, 1, 4).setValues([[form.nama, form.pt, form.hp, form.alamat]]);
+        return "Data Pelanggan Diupdate";
+      }
     }
   }
   
-  if (status === "Sukses") {
-    // 2. Catat Transaksi (Laporan Harian)
-    ss.getSheetByName('TRANSAKSI').appendRow([
-      'TRX-' + Date.now(), 
-      new Date(), 
-      data.pelanggan, 
-      data.produkNama, 
-      data.qty, 
-      data.total, 
-      data.tipe, 
-      data.kasir
-    ]);
+  // BARU MODE
+  sheet.appendRow(['CUST-' + Date.now(), form.nama, form.pt, form.hp, form.alamat]);
+  return "Pelanggan Baru Disimpan";
+}
 
-    // 3. Auto Keuangan (Masuk Laporan Arus Kas)
-    ss.getSheetByName('KEUANGAN').appendRow([
-      'AUTO-' + Date.now(), 
-      new Date(), 
-      'Pemasukan', 
-      'Penjualan Gas', 
-      data.total, 
-      `Jual (${data.tipe}): ${data.produkNama}`
-    ]);
-    
-    return "Transaksi Berhasil Disimpan";
-  } else {
-    throw new Error("Produk tidak ditemukan");
+function hapusPelanggan(id) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('PELANGGAN');
+  const data = sheet.getDataRange().getValues();
+  for(let i=1; i<data.length; i++) {
+    if(data[i][0] == id) { 
+      sheet.deleteRow(i+1); 
+      return "Pelanggan Dihapus";
+    }
   }
+}
+
+// Fungsi bantu untuk mengambil List Pelanggan di Kasir
+function getListPelanggan() {
+  return getData('PELANGGAN'); // <--- WAJIB ADA 'return'
+}
+
+// 3. Hapus / Retur Transaksi
+function prosesRetur(idTrx, produkNama, qty, tipe, mode) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const prodSheet = ss.getSheetByName('PRODUK');
+  const trxSheet = ss.getSheetByName('TRANSAKSI');
+  const keuSheet = ss.getSheetByName('KEUANGAN');
+  
+  // A. KEMBALIKAN STOK
+  const prodData = prodSheet.getDataRange().getValues();
+  for (let i = 1; i < prodData.length; i++) {
+    if (prodData[i][1] == produkNama) {
+       let curIsi = Number(prodData[i][4]);
+       let curKosong = Number(prodData[i][5]);
+       
+       // Logic Retur: Kembalikan Stok Isi, Kurangi Stok Kosong (jika refill)
+       prodSheet.getRange(i + 1, 5).setValue(curIsi + Number(qty));
+       
+       if(tipe === 'Tukar (Refill)') {
+          prodSheet.getRange(i + 1, 6).setValue(curKosong - Number(qty));
+       }
+       break;
+    }
+  }
+
+  // B. UPDATE STATUS TRANSAKSI & KEUANGAN
+  // Cari baris transaksi
+  const trxData = trxSheet.getDataRange().getValues();
+  let nominalRefund = 0;
+
+  for(let i=1; i<trxData.length; i++) {
+    // Mencocokkan ID, Produk, dan memastikan belum diretur
+    if(trxData[i][0] == idTrx && trxData[i][3] == produkNama && trxData[i][8] != 'Retur') {
+       if(mode === 'FULL') {
+         trxSheet.deleteRow(i+1); // Hapus baris permanen jika mau bersih
+         // Atau tandai: trxSheet.getRange(i+1, 9).setValue('Retur');
+       } else {
+         trxSheet.getRange(i+1, 9).setValue('Retur Item');
+       }
+       nominalRefund = trxData[i][5]; // Ambil total harga item tsb
+       break;
+    }
+  }
+
+  // C. CATAT PENGELUARAN REFUND DI KEUANGAN (Agar Balance)
+  keuSheet.appendRow([
+      'REFUND-' + Date.now(), new Date(), 
+      'Pengeluaran', 'Retur Penjualan', 
+      nominalRefund, `Retur: ${produkNama} (${idTrx})`
+  ]);
+
+  return "Berhasil Retur/Hapus";
 }
 
 // --- PEMBELIAN (BELI) ---
