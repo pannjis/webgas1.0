@@ -2,6 +2,9 @@
   let currentUser = {};
   let payrollDataTemp = [];
   let keranjangBelanja = [];
+  let globalRiwayatData = [];
+  let dataJualTemp = [];
+  let dataBeliTemp = [];
   let globalModalObj;
   let onConfirmAction = null;
   const rupiah = (n) => new Intl.NumberFormat('id-ID', {style: 'currency', currency: 'IDR', minimumFractionDigits:0}).format(n);
@@ -340,50 +343,103 @@ function prosesBayarFinal() {
     }
   }
 
+// --- javascript ---
+
   // --- RIWAYAT TRANSAKSI ---
 
 function loadRiwayatData() {
     loading(true);
-    google.script.run.withSuccessHandler(data => {
-       loading(false);
-       
-       // --- PENGAMAN ---
-       if (!data) return;
+    google.script.run
+      .withFailureHandler(err => {
+         loading(false);
+         myAlert('Error', err, 'error');
+      })
+      .withSuccessHandler(data => {
+         loading(false);
+         globalRiwayatData = data; // Simpan ke variabel global
 
-       const tb = document.querySelector('#tabel-riwayat tbody');
-       tb.innerHTML = '';
-       
-       data.forEach(row => {
-          const tgl = new Date(row[1]).toLocaleString();
-          const isRetur = row[8] && row[8].includes('Retur');
-          const style = isRetur ? 'text-decoration: line-through; color: red;' : '';
-          
-          tb.innerHTML += `
-            <tr style="${style}">
-               <td><small class="fw-bold">${row[0]}</small><br><small text-muted>${tgl}</small></td>
-               <td>${row[2]}</td>
-               <td>${row[3]} <br> <span class="badge bg-secondary">${row[6]}</span></td>
-               <td>${row[4]}</td>
-               <td class="fw-bold">${rupiah(row[5])}</td>
-               <td>
-                 ${!isRetur ? `
-                 <button class="btn btn-sm btn-outline-danger" onclick="aksiRetur('${row[0]}', '${row[3]}', ${row[4]}, '${row[6]}')">Retur</button>
-                 ` : '<span class="badge bg-danger">Sudah Retur</span>'}
-               </td>
+         const tb = document.querySelector('#tabel-riwayat tbody');
+         const thead = document.querySelector('#tabel-riwayat thead tr');
+         
+         // Update Header Tabel Sesuai Permintaan
+         thead.innerHTML = `
+            <th>ID & Waktu</th>
+            <th>Pelanggan</th>
+            <th>Total</th>
+            <th>Aksi</th>
+         `;
+
+         tb.innerHTML = '';
+         
+         if (!data || data.length === 0) {
+            tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada data transaksi.</td></tr>';
+            return;
+         }
+  
+         data.forEach((trx, index) => {
+            let tgl = '-';
+            try { tgl = new Date(trx.waktu).toLocaleString('id-ID'); } catch(e) {}
+            
+            // Render Baris (Row)
+            tb.innerHTML += `
+              <tr>
+                 <td>
+                    <span class="fw-bold text-primary">${trx.id}</span><br>
+                    <small class="text-muted">${tgl}</small>
+                 </td>
+                 <td>${trx.pelanggan} <br> <small class="text-muted">Kasir: ${trx.kasir}</small></td>
+                 <td class="fw-bold">${rupiah(trx.totalBayar)}</td>
+                 <td>
+                   <button class="btn btn-sm btn-info text-white" onclick="viewDetail(${index})">
+                      <i class="material-icons align-middle" style="font-size:16px">visibility</i> View
+                   </button>
+                 </td>
+              </tr>
+            `;
+         });
+      }).getRiwayatTransaksi();
+}
+
+// Fungsi untuk Membuka Modal Detail
+function viewDetail(index) {
+    const trx = globalRiwayatData[index]; // Ambil data dari variabel global berdasarkan index
+    if(!trx) return;
+
+    // Isi Info Header Modal
+    document.getElementById('det-id').innerText = trx.id;
+    document.getElementById('det-pelanggan').innerText = trx.pelanggan;
+    document.getElementById('det-waktu').innerText = new Date(trx.waktu).toLocaleString('id-ID');
+    
+    // Isi Tabel Detail Item
+    const tb = document.querySelector('#tabel-detail-trx tbody');
+    tb.innerHTML = '';
+    
+    trx.items.forEach(item => {
+        tb.innerHTML += `
+            <tr>
+                <td>${item.produk} <br> <small class="text-muted">${item.tipe}</small></td>
+                <td class="text-center">${item.qty}</td>
+                <td class="text-end">${rupiah(item.hargaTotal)}</td>
             </tr>
-          `;
-       });
-    }).getRiwayatTransaksi();
-  }
+        `;
+    });
 
-function aksiRetur(id, produk, qty, tipe) {
+    // Isi Grand Total di Bawah Modal
+    document.getElementById('det-total').innerText = rupiah(trx.totalBayar);
+
+    // Tampilkan Modal
+    new bootstrap.Modal(document.getElementById('modalDetailTrx')).show();
+}
+
+  function aksiRetur(id, produk, qty, tipe) {
+     // Menggunakan myConfirm (Modal) agar konsisten dengan UI
      myConfirm('Retur Barang', `Yakin ingin membatalkan/retur item ini?\n\n${produk} (${qty})\n\nStok akan dikembalikan ke sistem.`, () => {
         loading(true);
         google.script.run.withSuccessHandler(res => {
            loading(false);
            myAlert('Sukses', res, 'success');
            loadRiwayatData();
-           loadProduk(); 
+           loadProduk(); // Update stok di tabel produk
         }).prosesRetur(id, produk, qty, tipe, 'PARTIAL');
      });
   }
@@ -391,7 +447,11 @@ function aksiRetur(id, produk, qty, tipe) {
   function filterRiwayat() {
     const k = document.getElementById('cari-trx').value.toLowerCase();
     document.querySelectorAll('#tabel-riwayat tbody tr').forEach(tr => {
-       tr.style.display = tr.innerText.toLowerCase().includes(k) ? '' : 'none';
+       if(tr.innerText.toLowerCase().includes(k)) {
+          tr.style.display = '';
+       } else {
+          tr.style.display = 'none';
+       }
     });
   }
 
@@ -413,6 +473,187 @@ function aksiRetur(id, produk, qty, tipe) {
        tr.style.display = tr.innerText.toLowerCase().includes(k) ? '' : 'none';
     });
   }
+
+  // 2. FUNGSI LOAD DATA
+function loadRiwayatJual() {
+   loading(true);
+   google.script.run.withSuccessHandler(data => {
+      loading(false);
+      dataJualTemp = data; // Simpan ke global
+      renderTabelRiwayat('tabel-riwayat-jual', data, 'JUAL');
+   }).getRiwayatTransaksi(); // Fungsi lama (sudah diupdate grouping)
+}
+
+function loadRiwayatBeli() {
+   loading(true);
+   google.script.run.withSuccessHandler(data => {
+      loading(false);
+      dataBeliTemp = data; // Simpan ke global
+      renderTabelRiwayat('tabel-riwayat-beli', data, 'BELI');
+   }).getRiwayatPembelian(); // Fungsi baru di Code.gs
+}
+
+// 3. RENDER TABEL GENERIK
+function renderTabelRiwayat(tableId, data, tipe) {
+   const tb = document.querySelector(`#${tableId} tbody`);
+   tb.innerHTML = '';
+   if(!data || data.length === 0) { tb.innerHTML = '<tr><td colspan="4" class="text-center">Kosong</td></tr>'; return; }
+
+   data.forEach((trx, index) => {
+      let tgl = new Date(trx.waktu).toLocaleString('id-ID');
+      tb.innerHTML += `
+        <tr>
+           <td><span class="fw-bold text-primary">${trx.id}</span><br><small>${tgl}</small></td>
+           <td>${trx.pelanggan}</td>
+           <td class="fw-bold">${rupiah(trx.totalBayar)}</td>
+           <td>
+             <button class="btn btn-sm btn-info text-white" onclick="viewDetailTrx('${tipe}', ${index})">
+                <i class="material-icons" style="font-size:16px">visibility</i> View
+             </button>
+           </td>
+        </tr>`;
+   });
+}
+
+// 4. VIEW DETAIL & TOMBOL RETUR
+function viewDetailTrx(tipe, index) {
+   const data = tipe === 'JUAL' ? dataJualTemp : dataBeliTemp;
+   const trx = data[index];
+   
+   // Isi Modal Detail (Reuse modal yang sudah ada)
+   document.getElementById('det-id').innerText = trx.id;
+   document.getElementById('det-pelanggan').innerText = trx.pelanggan;
+   document.getElementById('det-waktu').innerText = new Date(trx.waktu).toLocaleString();
+   document.getElementById('det-total').innerText = rupiah(trx.totalBayar);
+   
+   const tb = document.querySelector('#tabel-detail-trx tbody');
+   tb.innerHTML = '';
+   trx.items.forEach(item => {
+       tb.innerHTML += `<tr><td>${item.produk}</td><td class="text-center">${item.qty}</td><td class="text-end">${rupiah(item.hargaTotal)}</td></tr>`;
+   });
+
+   // PERUBAHAN: Tambahkan Tombol Retur di Footer Modal Detail secara dinamis
+   const footer = document.querySelector('#modalDetailTrx .modal-footer');
+   // Reset footer dulu
+   footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>`;
+   
+   // Tambah tombol RETUR
+   const btnRetur = document.createElement('button');
+   btnRetur.className = 'btn btn-danger ms-2';
+   btnRetur.innerText = 'RETUR / BATAL';
+   btnRetur.onclick = () => {
+       // Tutup modal detail, buka modal form retur
+       bootstrap.Modal.getInstance(document.getElementById('modalDetailTrx')).hide();
+       bukaFormRetur(trx, tipe);
+   };
+   footer.appendChild(btnRetur);
+
+   new bootstrap.Modal(document.getElementById('modalDetailTrx')).show();
+}
+
+// 5. BUKA FORM RETUR (Baru)
+function bukaFormRetur(trx, tipe) {
+    document.getElementById('retur-id-trx').value = trx.id;
+    document.getElementById('retur-jenis-trx').value = tipe;
+    document.getElementById('check-retur-semua').checked = false;
+    document.getElementById('retur-alasan').value = '';
+    
+    const container = document.getElementById('container-retur-items');
+    container.innerHTML = '';
+
+    trx.items.forEach((item, idx) => {
+        // Hitung harga satuan kasar untuk referensi refund
+        let hargaSatuan = item.hargaTotal / item.qty;
+        
+        container.innerHTML += `
+           <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2 item-retur-row">
+              <div style="flex:1">
+                 <small class="fw-bold">${item.produk}</small><br>
+                 <small class="text-muted">Dibeli: ${item.qty} | ${item.tipe || ''}</small>
+                 <input type="hidden" class="data-produk" value="${item.produk}">
+                 <input type="hidden" class="data-tipe" value="${item.tipe || ''}">
+                 <input type="hidden" class="data-harga" value="${hargaSatuan}">
+                 <input type="hidden" class="data-qty-asal" value="${item.qty}">
+              </div>
+              <div style="width: 100px;">
+                 <input type="number" class="form-control form-control-sm input-qty-retur" 
+                        placeholder="0" min="0" max="${item.qty}">
+              </div>
+           </div>
+        `;
+    });
+    
+    new bootstrap.Modal(document.getElementById('modalFormRetur')).show();
+}
+
+// 6. TOGGLE RETUR SEMUA
+function toggleReturSemua() {
+    const isChecked = document.getElementById('check-retur-semua').checked;
+    const inputs = document.querySelectorAll('.input-qty-retur');
+    const rows = document.querySelectorAll('.item-retur-row');
+    
+    inputs.forEach((input, idx) => {
+        if(isChecked) {
+            // Isi dengan qty maksimal (qty beli)
+            const qtyAsal = rows[idx].querySelector('.data-qty-asal').value;
+            input.value = qtyAsal;
+            input.setAttribute('readonly', true); // Kunci input
+        } else {
+            input.value = '';
+            input.removeAttribute('readonly'); // Buka kunci
+        }
+    });
+}
+
+// 7. PROSES SIMPAN KE DATABASE
+function prosesSimpanRetur() {
+    const idTrx = document.getElementById('retur-id-trx').value;
+    const jenis = document.getElementById('retur-jenis-trx').value;
+    const alasan = document.getElementById('retur-alasan').value;
+    
+    let itemsToReturn = [];
+    let hasInput = false;
+
+    const rows = document.querySelectorAll('.item-retur-row');
+    rows.forEach(row => {
+        const prod = row.querySelector('.data-produk').value;
+        const tipe = row.querySelector('.data-tipe').value;
+        const harga = row.querySelector('.data-harga').value;
+        const qtyInput = row.querySelector('.input-qty-retur').value;
+        const qtyRetur = Number(qtyInput);
+
+        if(qtyRetur > 0) hasInput = true;
+        
+        itemsToReturn.push({
+            produk: prod,
+            tipe: tipe,
+            hargaSatuan: harga,
+            qtyRetur: qtyRetur
+        });
+    });
+
+    if(!hasInput) return myAlert('Error', 'Masukkan jumlah barang yang ingin diretur!', 'error');
+
+    const payload = {
+        idTrx: idTrx,
+        jenis: jenis, // 'JUAL' atau 'BELI'
+        alasan: alasan,
+        items: itemsToReturn
+    };
+    
+    // Kirim ke Backend
+    myConfirm('Konfirmasi Retur', 'Stok akan disesuaikan. Lanjutkan?', () => {
+        loading(true);
+        google.script.run.withSuccessHandler(res => {
+            loading(false);
+            bootstrap.Modal.getInstance(document.getElementById('modalFormRetur')).hide();
+            myAlert('Sukses', res, 'success');
+            // Refresh tabel yang sesuai
+            if(jenis === 'JUAL') loadRiwayatJual();
+            else loadRiwayatBeli();
+        }).prosesReturBaru(payload);
+    });
+}
 
   // --- PEMBELIAN ---
   function loadPembelianData() {
