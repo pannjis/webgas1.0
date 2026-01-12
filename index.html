@@ -40,7 +40,23 @@
       <ul class="nav nav-pills flex-column mb-auto gap-2">
         <li><a href="#" onclick="event.preventDefault(); showPage('dashboard')" class="nav-link text-white active" id="nav-dashboard"><i class="material-icons me-2 align-middle">dashboard</i> Dashboard</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('kasir')" class="nav-link text-white" id="nav-kasir"><i class="material-icons me-2 align-middle">point_of_sale</i> Kasir Jual</a></li>
-        <li><a href="#" onclick="event.preventDefault(); showPage('riwayat')" class="nav-link text-white" id="nav-riwayat"><i class="material-icons me-2 align-middle">history</i> Riwayat Transaksi</a></li>
+        <li><a href="#submenu-riwayat" data-bs-toggle="collapse" class="nav-link text-white align-middle px-0">
+            <i class="material-icons me-2 align-middle">history</i> <span class="ms-1 d-none d-sm-inline">Riwayat Transaksi</span> 
+            <i class="material-icons ms-auto text-white-50" style="font-size:18px;">expand_more</i>
+          </a>
+          <ul class="collapse nav flex-column ms-1" id="submenu-riwayat" data-bs-parent="#menu">
+              <li class="w-100">
+                  <a href="#" onclick="event.preventDefault(); showPage('riwayat-jual')" class="nav-link text-white px-4" id="nav-riwayat-jual">
+                    <small>• Riwayat Penjualan</small>
+                  </a>
+              </li>
+              <li>
+                  <a href="#" onclick="event.preventDefault(); showPage('riwayat-beli')" class="nav-link text-white px-4" id="nav-riwayat-beli">
+                    <small>• Riwayat Pembelian</small>
+                  </a>
+              </li>
+          </ul>
+        </li>
         <li><a href="#" onclick="event.preventDefault(); showPage('pembelian')" class="nav-link text-white" id="nav-pembelian"><i class="material-icons me-2 align-middle">shopping_cart</i> Stok Masuk</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('pelanggan')" class="nav-link text-white" id="nav-pelanggan"><i class="material-icons me-2 align-middle">people</i> Data Pelanggan</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('produk')" class="nav-link text-white" id="nav-produk"><i class="material-icons me-2 align-middle">inventory_2</i> Produk</a></li>
@@ -139,28 +155,73 @@
         </div>
       </div>
 
-      <div id="page-riwayat" class="page-section d-none">
-        <h3 class="fw-bold mb-3">Riwayat Transaksi</h3>
-        <div class="card p-3 border-0 shadow-sm">
-           <div class="d-flex justify-content-between mb-3">
-             <input type="text" id="cari-trx" class="form-control w-25" placeholder="Cari ID/Produk..." onkeyup="filterRiwayat()">
-             <button class="btn btn-success" onclick="loadRiwayatData()">🔄 Refresh</button>
-           </div>
-           <table class="table table-hover bg-white" id="tabel-riwayat">
-             <thead class="table-dark">
-               <tr>
-                 <th>ID & Waktu</th>
-                 <th>Pelanggan</th>
-                 <th>Item</th>
-                 <th>Tipe</th>
-                 <th>Total</th>
-                 <th>Aksi</th>
-               </tr>
-             </thead>
-             <tbody></tbody>
-           </table>
-        </div>
+<div id="page-riwayat-jual" class="page-section d-none">
+  <h3 class="fw-bold mb-3">Riwayat Penjualan (Retur)</h3>
+  <div class="card p-3 border-0 shadow-sm">
+     <div class="d-flex justify-content-between mb-3">
+       <input type="text" id="cari-trx-jual" class="form-control w-25" placeholder="Cari ID Transaksi..." onkeyup="filterTabel('tabel-riwayat-jual', this.value)">
+       <button class="btn btn-success" onclick="loadRiwayatJual()">売 Refresh</button>
+     </div>
+     <table class="table table-hover bg-white" id="tabel-riwayat-jual">
+       <thead class="table-dark">
+         <tr><th>ID & Waktu</th><th>Pelanggan</th><th>Total</th><th>Aksi</th></tr>
+       </thead>
+       <tbody></tbody>
+     </table>
+  </div>
+</div>
+
+<div id="page-riwayat-beli" class="page-section d-none">
+  <h3 class="fw-bold mb-3">Riwayat Pembelian (Retur)</h3>
+  <div class="card p-3 border-0 shadow-sm">
+     <div class="d-flex justify-content-between mb-3">
+       <input type="text" id="cari-trx-beli" class="form-control w-25" placeholder="Cari ID Pembelian..." onkeyup="filterTabel('tabel-riwayat-beli', this.value)">
+       <button class="btn btn-success" onclick="loadRiwayatBeli()">売 Refresh</button>
+     </div>
+     <table class="table table-hover bg-white" id="tabel-riwayat-beli">
+       <thead class="table-dark">
+         <tr><th>ID & Waktu</th><th>Supplier</th><th>Total</th><th>Aksi</th></tr>
+       </thead>
+       <tbody></tbody>
+     </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalFormRetur" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Form Retur Barang</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
+      <div class="modal-body">
+         <div class="alert alert-warning py-2 mb-3 small">
+            <i class="material-icons align-middle" style="font-size:16px">warning</i> 
+            Stok akan dikembalikan (Jual) atau dikurangi (Beli).
+         </div>
+         
+         <input type="hidden" id="retur-id-trx">
+         <input type="hidden" id="retur-jenis-trx"> <label class="fw-bold mb-2">Pilih Barang & Jumlah Retur:</label>
+         <div id="container-retur-items" class="border rounded p-2 bg-light" style="max-height:300px; overflow-y:auto;">
+            </div>
+         
+         <div class="mt-3 form-check">
+            <input class="form-check-input" type="checkbox" id="check-retur-semua" onchange="toggleReturSemua()">
+            <label class="form-check-label fw-bold" for="check-retur-semua">Retur Seluruh Transaksi (Batalkan)</label>
+         </div>
+         
+         <div class="mt-2">
+            <label class="small">Alasan Retur (Opsional)</label>
+            <input type="text" id="retur-alasan" class="form-control" placeholder="Cth: Barang rusak / Salah input">
+         </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-danger fw-bold" onclick="prosesSimpanRetur()">PROSES RETUR</button>
+      </div>
+    </div>
+  </div>
+</div>
 
       <div id="page-produk" class="page-section d-none">
         <div class="d-flex justify-content-between mb-3"><h3 class="fw-bold">Data Produk</h3><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalProduk">+ Produk</button></div>
@@ -336,5 +397,53 @@
       </div>
     </div>
   </div>
+
+  <div class="modal fade" id="modalDetailTrx" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Detail Transaksi</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="row mb-3 border-bottom pb-2">
+           <div class="col-6">
+              <small class="text-muted">ID Transaksi</small><br>
+              <strong id="det-id">-</strong>
+           </div>
+           <div class="col-6 text-end">
+              <small class="text-muted">Waktu</small><br>
+              <span id="det-waktu">-</span>
+           </div>
+           <div class="col-12 mt-2">
+              <small class="text-muted">Pelanggan</small><br>
+              <strong id="det-pelanggan" class="text-primary">-</strong>
+           </div>
+        </div>
+
+        <table class="table table-sm table-bordered" id="tabel-detail-trx">
+           <thead class="table-light">
+              <tr>
+                 <th>Item</th>
+                 <th class="text-center">Qty</th>
+                 <th class="text-end">Total</th>
+              </tr>
+           </thead>
+           <tbody></tbody>
+        </table>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+           <span class="fs-5">Total Bayar:</span>
+           <span class="fs-4 fw-bold text-success" id="det-total">Rp 0</span>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
