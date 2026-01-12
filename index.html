@@ -40,7 +40,9 @@
       <ul class="nav nav-pills flex-column mb-auto gap-2">
         <li><a href="#" onclick="event.preventDefault(); showPage('dashboard')" class="nav-link text-white active" id="nav-dashboard"><i class="material-icons me-2 align-middle">dashboard</i> Dashboard</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('kasir')" class="nav-link text-white" id="nav-kasir"><i class="material-icons me-2 align-middle">point_of_sale</i> Kasir Jual</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('riwayat')" class="nav-link text-white" id="nav-riwayat"><i class="material-icons me-2 align-middle">history</i> Riwayat Transaksi</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('pembelian')" class="nav-link text-white" id="nav-pembelian"><i class="material-icons me-2 align-middle">shopping_cart</i> Stok Masuk</a></li>
+        <li><a href="#" onclick="event.preventDefault(); showPage('pelanggan')" class="nav-link text-white" id="nav-pelanggan"><i class="material-icons me-2 align-middle">people</i> Data Pelanggan</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('produk')" class="nav-link text-white" id="nav-produk"><i class="material-icons me-2 align-middle">inventory_2</i> Produk</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('keuangan')" class="nav-link text-white" id="nav-keuangan"><i class="material-icons me-2 align-middle">account_balance_wallet</i> Arus Kas</a></li>
         <li><a href="#" onclick="event.preventDefault(); showPage('payroll')" class="nav-link text-white" id="nav-payroll"><i class="material-icons me-2 align-middle">badge</i> Payroll</a></li>
@@ -61,18 +63,102 @@
       </div>
 
       <div id="page-kasir" class="page-section d-none">
-        <div class="card shadow-sm border-0 p-4" style="max-width: 800px;">
-          <h4 class="fw-bold mb-3">Kasir Penjualan</h4>
-          <div class="row mb-3">
-             <div class="col"><label>Pelanggan</label><select id="kasir-pelanggan" class="form-select"><option>Umum</option></select></div>
-             <div class="col"><label>Tipe</label><select id="kasir-tipe" class="form-select"><option value="Tukar (Refill)">Tukar (Refill)</option><option value="Beli Tabung Baru">Tabung Baru</option></select></div>
+        <div class="row">
+          <div class="col-md-5">
+            <div class="card shadow-sm border-0 p-4">
+              <h5 class="fw-bold mb-3">Input Barang</h5>
+              
+              <div class="mb-2">
+                <label class="small text-muted">Pelanggan</label>
+                <div class="input-group">
+                  <select id="kasir-pelanggan" class="form-select"><option>Umum</option></select>
+                  <button class="btn btn-outline-secondary" onclick="modalPelanggan(true)" title="Tambah Pelanggan Baru">+</button>
+                </div>
+              </div>
+
+              <div class="mb-2">
+                 <label class="small text-muted">Tipe Transaksi</label>
+                 <select id="kasir-tipe" class="form-select">
+                   <option value="Tukar (Refill)">Tukar (Refill)</option>
+                   <option value="Beli Tabung Baru">Tabung Baru</option>
+                 </select>
+              </div>
+              
+              <div class="mb-2">
+                <label class="small text-muted">Pilih Produk</label>
+                <select id="kasir-produk" class="form-select" onchange="updateHargaJual()"></select>
+              </div>
+              
+              <div class="row mb-3">
+                <div class="col">
+                   <label class="small text-muted">Qty</label>
+                   <input type="number" id="kasir-qty" class="form-control" placeholder="Qty" oninput="updateHargaJual()">
+                </div>
+                <div class="col">
+                   <label class="small text-muted">Subtotal</label>
+                   <div class="fw-bold text-danger mt-2" id="kasir-total">Rp 0</div>
+                </div>
+              </div>
+
+              <button onclick="tambahKeKeranjang()" class="btn btn-warning w-100 fw-bold text-white mb-2">+ MASUKKAN KERANJANG</button>
+            </div>
           </div>
-          <div class="mb-3"><label>Produk</label><select id="kasir-produk" class="form-select form-select-lg" onchange="updateHargaJual()"></select></div>
-          <div class="mb-3"><label>Qty</label><input type="number" id="kasir-qty" class="form-control" value="1" oninput="updateHargaJual()"></div>
-          <div class="d-flex justify-content-between align-items-center mt-4">
-             <h3>Total: <span class="text-danger fw-bold" id="kasir-total">Rp 0</span></h3>
-             <button onclick="prosesJual()" class="btn btn-danger btn-lg">BAYAR</button>
+
+          <div class="col-md-7">
+             <div class="card shadow-sm border-0 p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h5 class="fw-bold">Keranjang Belanja</h5>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="resetKeranjang()">Reset</button>
+                </div>
+                
+                <div class="table-responsive mb-3" style="max-height: 300px; overflow-y:auto;">
+                  <table class="table table-sm table-striped" id="tabel-keranjang">
+                    <thead class="table-dark">
+                      <tr>
+                        <th>Produk</th>
+                        <th>Tipe</th>
+                        <th>Qty</th>
+                        <th>Total</th>
+                        <th>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                       </tbody>
+                  </table>
+                </div>
+
+                <div class="mt-auto border-top pt-3">
+                  <div class="d-flex justify-content-between mb-3">
+                    <h4>Total Bayar:</h4>
+                    <h3 class="fw-bold text-success" id="label-grand-total">Rp 0</h3>
+                  </div>
+                  <button onclick="prosesBayarFinal()" class="btn btn-danger btn-lg w-100 shadow">SIMPAN & BAYAR</button>
+                </div>
+             </div>
           </div>
+        </div>
+      </div>
+
+      <div id="page-riwayat" class="page-section d-none">
+        <h3 class="fw-bold mb-3">Riwayat Transaksi</h3>
+        <div class="card p-3 border-0 shadow-sm">
+           <div class="d-flex justify-content-between mb-3">
+             <input type="text" id="cari-trx" class="form-control w-25" placeholder="Cari ID/Produk..." onkeyup="filterRiwayat()">
+             <button class="btn btn-success" onclick="loadRiwayatData()">🔄 Refresh</button>
+           </div>
+           <table class="table table-hover bg-white" id="tabel-riwayat">
+             <thead class="table-dark">
+               <tr>
+                 <th>ID & Waktu</th>
+                 <th>Pelanggan</th>
+                 <th>Item</th>
+                 <th>Tipe</th>
+                 <th>Total</th>
+                 <th>Aksi</th>
+               </tr>
+             </thead>
+             <tbody></tbody>
+           </table>
         </div>
       </div>
 
@@ -102,6 +188,53 @@
             <button onclick="prosesBeli()" class="btn btn-primary w-100">SIMPAN</button>
          </div>
       </div>
+
+      <div id="page-pelanggan" class="page-section d-none">
+     <div class="d-flex justify-content-between mb-3">
+        <h3 class="fw-bold">Data Pelanggan</h3>
+        <button class="btn btn-primary" onclick="modalPelanggan()">+ Pelanggan Baru</button>
+     </div>
+     <div class="card shadow-sm border-0 p-3">
+       <input type="text" id="cari-pelanggan" class="form-control mb-3" placeholder="Cari Nama / PT..." onkeyup="filterPelanggan()">
+       <table class="table table-hover" id="tabel-pelanggan">
+         <thead class="table-light"><tr><th>Nama</th><th>Perusahaan</th><th>Kontak</th><th>Aksi</th></tr></thead>
+         <tbody></tbody>
+       </table>
+     </div>
+  </div>
+
+  <div class="modal fade" id="modalPelanggan" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="fw-bold">Form Pelanggan</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="pel-id">
+          <div class="mb-2">
+            <label>Nama Kontak</label>
+            <input id="pel-nama" class="form-control" placeholder="Cth: Bpk. Budi">
+          </div>
+          <div class="mb-2">
+             <label>Nama Perusahaan / Toko</label>
+             <input id="pel-pt" class="form-control" placeholder="Cth: PT. Maju Jaya / Warung Berkah">
+          </div>
+          <div class="mb-2">
+             <label>No HP / WA</label>
+             <input id="pel-hp" class="form-control" type="number">
+          </div>
+          <div class="mb-2">
+             <label>Alamat Lengkap</label>
+             <textarea id="pel-alamat" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+           <button onclick="simpanPelangganDB()" class="btn btn-primary w-100">SIMPAN DATA</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
       <div id="page-keuangan" class="page-section d-none">
         <div class="d-flex justify-content-between mb-3"><h3 class="fw-bold">Arus Kas</h3><button class="btn btn-primary" onclick="bukaModalKeuangan()">+ Catat</button></div>
@@ -182,5 +315,26 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <?!= include('javascript'); ?>
+
+  <div class="modal fade" id="globalModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+        <div class="modal-header text-white" id="globalModalHeader">
+          <h5 class="modal-title fw-bold" id="globalModalTitle">Pemberitahuan</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="d-flex align-items-center">
+             <i class="material-icons me-3" id="globalModalIcon" style="font-size: 40px;">info</i>
+             <p class="mb-0 fs-6" id="globalModalBody">Pesan...</p>
+          </div>
+        </div>
+        <div class="modal-footer border-0 bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btn-cancel">Batal</button>
+          <button type="button" class="btn btn-primary fw-bold px-4" id="btn-confirm">YA</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
